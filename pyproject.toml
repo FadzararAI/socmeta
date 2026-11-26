@@ -1,0 +1,62 @@
+[build-system]
+requires = ["hatchling>=1.18"]
+build-backend = "hatchling.build"
+
+[project]
+name = "socmeta"
+version = "0.1.0"
+description = "Extract public social post metadata — likes, comments, shares, views, followers — from a post URL."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "FadzararAI" }]
+keywords = [
+    "social-media",
+    "metadata",
+    "scraper",
+    "instagram",
+    "tiktok",
+    "twitter",
+    "x",
+    "facebook",
+    "threads",
+    "youtube",
+    "followers",
+    "engagement",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Internet :: WWW/HTTP",
+]
+dependencies = [
+    "yt-dlp>=2024.8.0",
+    "curl_cffi>=0.6.0",
+    "tls-client3>=1.1.2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.urls]
+Homepage = "https://github.com/FadzararAI/socmeta"
+Repository = "https://github.com/FadzararAI/socmeta"
+Issues = "https://github.com/FadzararAI/socmeta/issues"
+
+[project.scripts]
+socmeta = "socmeta.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/socmeta"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/README.md",
+    "/LICENSE",
+    "/NOTICE",
+    "/examples",
+]

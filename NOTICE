@@ -1,0 +1,24 @@
+socmeta
+=======
+
+Copyright (c) 2026 FadzararAI
+
+This product includes third-party software:
+
+1. yt-dlp (Unlicense)
+   https://github.com/yt-dlp/yt-dlp
+   Used as a runtime dependency for YouTube / TikTok / X / Instagram extraction.
+   Runtime patches in socmeta/ytdlp_patch.py map extra fields (bookmarks,
+   author followers) already present in those payloads.
+
+2. facebook-posts-details (MIT)
+   Copyright (c) 2026 Aman / binarykernal
+   https://github.com/binarykernal/facebook-posts-details
+   Vendored under src/socmeta/vendor/facebook_posts_details/
+   See that directory's LICENSE file.
+
+3. threads-scraper (MIT)
+   Copyright (c) 2026 ToolzerHub
+   https://github.com/toolzerhub/threads-scraper
+   Vendored as src/socmeta/vendor/threads_scraper.py
+   See src/socmeta/vendor/THREADS_LICENSE.
