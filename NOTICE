@@ -22,3 +22,7 @@ This product includes third-party software:
    https://github.com/toolzerhub/threads-scraper
    Vendored as src/socmeta/vendor/threads_scraper.py
    See src/socmeta/vendor/THREADS_LICENSE.
+
+4. FixTweet / fxtwitter (public HTTP API)
+   https://api.fxtwitter.com
+   Used at runtime for X/Twitter profile timelines (no code vendored).

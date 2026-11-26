@@ -4,24 +4,28 @@ Extract **public** social post metadata from a URL — likes, comments, shares/r
 
 No login required for public posts.
 
-## Workflow
+## Workflows
 
+**Single post**
 ```
-post URL
-   │
-   ├─ detect platform
-   ├─ scrape post engagement + author handle
-   └─ if followers missing → author profile → followers
+post URL → detect platform → engagement + author
+         → if followers missing → author profile → followers
 ```
 
-| Platform  | Post metrics                         | Followers                         |
-|-----------|--------------------------------------|-----------------------------------|
-| YouTube   | yt-dlp                               | embedded on post                  |
-| TikTok    | yt-dlp (+ share/save mapping)        | embedded on post                  |
-| X         | yt-dlp (+ bookmarks)                 | embedded on post                  |
-| Instagram | yt-dlp                               | profile lookup from author handle |
-| Facebook  | vendored FB page parser              | profile (with post)               |
-| Threads   | vendored Threads parser              | profile lookup                    |
+**Profile feed**
+```
+profile URL / @handle → list recent posts
+                      → optional --enrich (full metrics per post)
+```
+
+| Platform  | Post metrics                         | Profile feed                         | Followers                         |
+|-----------|--------------------------------------|--------------------------------------|-----------------------------------|
+| YouTube   | yt-dlp                               | yt-dlp channel `/videos`             | embedded on post                  |
+| TikTok    | yt-dlp (+ share/save mapping)        | yt-dlp `@user` playlist              | embedded on post                  |
+| X         | yt-dlp (+ bookmarks)                 | FixTweet profile statuses            | embedded / feed                   |
+| Instagram | yt-dlp                               | profile page (~12 posts)             | profile lookup                    |
+| Facebook  | vendored FB page parser              | page + `/reels` media ids (limited)  | profile                           |
+| Threads   | vendored Threads parser              | Threads profile posts                | profile lookup                    |
 
 ## Install
 
@@ -32,18 +36,28 @@ pip install -e .
 ## CLI
 
 ```bash
+# single / batch posts
 socmeta "https://www.instagram.com/p/XXXX/"
 socmeta URL1 URL2 URL3
 socmeta --coverage
+
+# profile feeds
+socmeta profile "https://www.tiktok.com/@uzoneindonesia" --limit 10
+socmeta profile @SmwGwOto --platform x --limit 15
+socmeta profile "https://www.instagram.com/hujat_otomotiff/" --enrich
 ```
 
 ## Python
 
 ```python
-from socmeta import extract
+from socmeta import extract, profile_posts
 
 row = extract("https://x.com/user/status/123")
 print(row["likes"], row["followers"], row["author_profile"])
+
+feed = profile_posts("https://www.tiktok.com/@uzoneindonesia", limit=10)
+for post in feed["posts"]:
+    print(post["url"], post.get("views"), post.get("likes"))
 ```
 
 ## Output fields
