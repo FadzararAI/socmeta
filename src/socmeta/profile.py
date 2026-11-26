@@ -13,6 +13,7 @@ def profile_posts(
     platform: str | None = None,
     limit: int = 20,
     enrich: bool = False,
+    include_replies: bool = False,
     cookies_from_browser: str | None = None,
     cookiefile: str | None = None,
     verbose: bool = False,
@@ -29,6 +30,8 @@ def profile_posts(
     enrich:
         When True, re-scrape each post URL for full engagement metrics
         (slower; useful when the feed listing omits likes/comments).
+    include_replies:
+        For X, include reply / thread-continuation statuses. Default False.
     """
     resolved = resolve_profile(ref, platform=platform)
     plat = resolved["platform"]
@@ -50,7 +53,7 @@ def profile_posts(
     elif plat == "x":
         from .platforms.x import list_profile_posts as list_x
 
-        result = list_x(username, limit=limit)
+        result = list_x(username, limit=limit, include_replies=include_replies)
     elif plat == "instagram":
         from .platforms.instagram import list_profile_posts as list_ig
 

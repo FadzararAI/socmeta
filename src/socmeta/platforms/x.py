@@ -26,13 +26,38 @@ def _created_iso(item: dict[str, Any]) -> str | None:
         return str(raw)
 
 
-def list_profile_posts(username: str, *, limit: int = 20) -> dict[str, Any]:
+def _is_reply(item: dict[str, Any]) -> bool:
+    """True when the status is a reply (incl. self-thread continuations)."""
+    replying_to = item.get("replying_to")
+    if isinstance(replying_to, dict) and (replying_to.get("status") or replying_to.get("screen_name")):
+        return True
+    if item.get("replying_to_status") or item.get("in_reply_to_id") or item.get("in_reply_to_status_id"):
+        return True
+    if isinstance(replying_to, str) and replying_to.strip():
+        return True
+    return False
+
+
+def list_profile_posts(
+    username: str,
+    *,
+    limit: int = 20,
+    include_replies: bool = False,
+) -> dict[str, Any]:
+    """List recent posts from an X profile.
+
+    By default, replies (including self-replies in a thread) are skipped so the
+    feed matches standalone posts — not comment/thread continuations.
+    Pass ``include_replies=True`` to keep them.
+    """
     handle = username.lstrip("@")
     posts: list[dict[str, Any]] = []
     cursor: str | None = None
     author_meta: dict[str, Any] = {}
+    pages = 0
 
-    while len(posts) < limit:
+    while len(posts) < limit and pages < 10:
+        pages += 1
         url = f"https://api.fxtwitter.com/2/profile/{quote(handle)}/statuses"
         if cursor:
             url += f"?cursor={quote(cursor)}"
@@ -46,6 +71,8 @@ def list_profile_posts(username: str, *, limit: int = 20) -> dict[str, Any]:
         for item in results:
             if item.get("type") and item.get("type") != "status":
                 continue
+            if not include_replies and _is_reply(item):
+                continue
             author = item.get("author") or {}
             if not author_meta and author:
                 author_meta = {
@@ -55,6 +82,7 @@ def list_profile_posts(username: str, *, limit: int = 20) -> dict[str, Any]:
                     "profile_url": author.get("url") or f"https://x.com/{handle}",
                 }
             tid = str(item.get("id") or "")
+            replying_to = item.get("replying_to") if isinstance(item.get("replying_to"), dict) else None
             posts.append({
                 "platform": "x",
                 "url": item.get("url") or (f"https://x.com/{handle}/status/{tid}" if tid else None),
@@ -70,6 +98,8 @@ def list_profile_posts(username: str, *, limit: int = 20) -> dict[str, Any]:
                 "views": item.get("views"),
                 "quotes": item.get("quotes"),
                 "post_date": _created_iso(item),
+                "is_reply": bool(replying_to),
+                "reply_to_id": (replying_to or {}).get("status"),
                 "status": "ok",
             })
             if len(posts) >= limit:
@@ -88,4 +118,5 @@ def list_profile_posts(username: str, *, limit: int = 20) -> dict[str, Any]:
         "posts": posts[:limit],
         "count": min(len(posts), limit),
         "source": "fxtwitter",
+        "note": None if include_replies else "Replies / thread continuations excluded by default.",
     }
