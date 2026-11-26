@@ -64,24 +64,65 @@ def profile_followers(profile_url: str) -> int | None:
     return int(num * mult)
 
 
+def _profile_id_from_url(url: str) -> str | None:
+    m = re.search(r"[?&]id=(\d+)", url)
+    if m:
+        return m.group(1)
+    parts = [p for p in urlparse(url).path.split("/") if p]
+    # /people/Name/6159... or bare numeric
+    for p in reversed(parts):
+        if p.isdigit() and len(p) >= 10:
+            return p
+    return None
+
+
 def _base_profile(url: str) -> str:
+    """Normalize a Facebook profile/page URL, keeping profile.php?id=."""
     parsed = urlparse(url)
+    profile_id = _profile_id_from_url(url)
+    if "profile.php" in (parsed.path or "") and profile_id:
+        return f"https://www.facebook.com/profile.php?id={profile_id}"
+    if profile_id and (not parsed.path or parsed.path in {"/", ""}):
+        return f"https://www.facebook.com/profile.php?id={profile_id}"
+
     parts = [p for p in parsed.path.split("/") if p]
-    # strip trailing tab segments
     while parts and parts[-1].lower() in {"reels", "videos", "posts", "photos", "about", "reviews"}:
         parts.pop()
+    if parts and parts[0] == "people" and profile_id:
+        return f"https://www.facebook.com/profile.php?id={profile_id}"
     path = "/" + "/".join(parts) if parts else ""
     return f"https://www.facebook.com{path}"
 
 
+def _profile_tabs(base: str) -> list[str]:
+    """Candidate feed URLs for a page/profile (logged-out)."""
+    if "profile.php" in base and "id=" in base:
+        return [
+            base,
+            f"{base}&sk=reels_tab" if "?" in base else f"{base}?sk=reels_tab",
+        ]
+    return [base, f"{base.rstrip('/')}/reels", f"{base.rstrip('/')}/videos"]
+
+
+def _post_url_for(base: str, post_id: str) -> str:
+    profile_id = _profile_id_from_url(base)
+    slug = [p for p in urlparse(base).path.split("/") if p]
+    if slug and slug[0] not in {"profile.php", "people"} and not slug[0].isdigit():
+        return f"https://www.facebook.com/{slug[0]}/posts/{post_id}"
+    if profile_id:
+        return f"https://www.facebook.com/permalink.php?story_fbid={post_id}&id={profile_id}"
+    return f"https://www.facebook.com/{post_id}"
+
+
 def list_profile_posts(profile_url: str, *, limit: int = 20) -> dict[str, Any]:
-    """List recent public reel/video/post IDs from a Facebook page.
+    """List recent public reel/video/post IDs from a Facebook page/profile.
 
     Logged-out Facebook pages expose a limited set of media IDs (best on the
-    Reels tab). Full engagement metrics require enrich=True (per-post scrape).
+    Reels tab / ``sk=reels_tab``). Use enrich=True for captions and metrics.
     """
     base = _base_profile(profile_url)
-    tabs = [base, f"{base}/reels", f"{base}/videos"]
+    profile_id = _profile_id_from_url(base) or _profile_id_from_url(profile_url)
+    tabs = _profile_tabs(base)
 
     video_ids: list[str] = []
     post_ids: list[str] = []
@@ -93,6 +134,8 @@ def list_profile_posts(profile_url: str, *, limit: int = 20) -> dict[str, Any]:
             html = fetch_html(tab) or ""
         except Exception:  # noqa: BLE001
             continue
+        if not html:
+            continue
         if not display_name:
             m = re.search(r'<meta\s+property="og:title"\s+content="([^"]+)"', html, re.I)
             if m:
@@ -103,8 +146,6 @@ def list_profile_posts(profile_url: str, *, limit: int = 20) -> dict[str, Any]:
         for pid in re.findall(r'"post_id"\s*:\s*"?(\d+)"?', html):
             if pid not in post_ids:
                 post_ids.append(pid)
-        if len(video_ids) + len(post_ids) >= limit * 2:
-            break
 
     try:
         followers = profile_followers(base)
@@ -117,7 +158,7 @@ def list_profile_posts(profile_url: str, *, limit: int = 20) -> dict[str, Any]:
             "platform": "facebook",
             "url": f"https://www.facebook.com/reel/{vid}",
             "id": vid,
-            "username": display_name,
+            "username": display_name or profile_id,
             "display_name": display_name,
             "caption": None,
             "likes": None,
@@ -135,20 +176,13 @@ def list_profile_posts(profile_url: str, *, limit: int = 20) -> dict[str, Any]:
 
     if len(posts) < limit:
         for pid in post_ids:
-            # Avoid duplicating ids already used as reels
             if pid in video_ids:
                 continue
-            # Prefer page-scoped post URL when username slug is available
-            slug = [p for p in urlparse(base).path.split("/") if p]
-            if slug and not slug[0].isdigit() and slug[0] != "profile.php":
-                post_url = f"https://www.facebook.com/{slug[0]}/posts/{pid}"
-            else:
-                post_url = f"https://www.facebook.com/{pid}"
             posts.append({
                 "platform": "facebook",
-                "url": post_url,
+                "url": _post_url_for(base, pid),
                 "id": pid,
-                "username": display_name,
+                "username": display_name or profile_id,
                 "display_name": display_name,
                 "caption": None,
                 "likes": None,
@@ -166,12 +200,12 @@ def list_profile_posts(profile_url: str, *, limit: int = 20) -> dict[str, Any]:
 
     return {
         "platform": "facebook",
-        "username": display_name or ([p for p in urlparse(base).path.split("/") if p] or [None])[0],
+        "username": display_name or profile_id or ([p for p in urlparse(base).path.split("/") if p] or [None])[0],
         "display_name": display_name,
         "followers": followers,
         "profile_url": base,
         "posts": posts[:limit],
         "count": min(len(posts), limit),
         "source": "facebook_page_tabs",
-        "note": "Logged-out FB feeds are sparse; Reels tab works best. Use enrich=True for metrics.",
+        "note": "Logged-out FB feeds are sparse; Reels tab / sk=reels_tab works best. Use enrich=True for metrics.",
     }
