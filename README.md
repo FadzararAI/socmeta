@@ -24,7 +24,7 @@ profile URL / @handle → list recent posts
 | TikTok    | yt-dlp (+ share/save mapping)        | yt-dlp `@user` playlist              | embedded on post                  |
 | X         | yt-dlp (+ bookmarks)                 | FixTweet profile statuses            | embedded / feed                   |
 | Instagram | yt-dlp                               | profile page (~12 posts)             | profile lookup                    |
-| Facebook  | vendored FB page parser              | page + `/reels` media ids (limited)  | profile                           |
+| Facebook  | vendored FB page parser              | timeline GraphQL (posts + reels)     | profile                           |
 | Threads   | vendored Threads parser              | Threads profile posts                | profile lookup                    |
 
 ## Install
