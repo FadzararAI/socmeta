@@ -34,6 +34,34 @@ def _caption_text(node: dict[str, Any]) -> str | None:
     return None
 
 
+def _pk_int(value: Any) -> int:
+    if value is None:
+        return 0
+    try:
+        return int(str(value).split("_")[0])
+    except (TypeError, ValueError):
+        return 0
+
+
+def _path_for_media(node: dict[str, Any]) -> str:
+    """Prefer /p/ for feed posts/carousels; /reel/ for clips."""
+    seo = node.get("seo_canonical_url")
+    if isinstance(seo, str):
+        if "/reel/" in seo or "/reels/" in seo:
+            return "reel"
+        if "/p/" in seo:
+            return "p"
+    product = node.get("product_type")
+    media_type = node.get("media_type")
+    if product in {"clips", "reel", "reels"}:
+        return "reel"
+    if product == "carousel_container" or media_type in {1, 8}:
+        return "p"
+    if media_type == 2:
+        return "reel"
+    return "p"
+
+
 def _walk_media(data: Any) -> list[dict[str, Any]]:
     found: list[dict[str, Any]] = []
     stack = [data]
@@ -48,21 +76,14 @@ def _walk_media(data: Any) -> list[dict[str, Any]]:
                 and ("caption" in node or "media_type" in node or "product_type" in node)
                 and (node.get("pk") or node.get("id"))
             ):
-                product = node.get("product_type")
-                path = "reel" if product in {"clips", "reel", "reels"} or node.get("media_type") == 2 else "p"
-                # clips/reels often media_type 2; carousels/photos use /p/
-                if product == "carousel_container" or node.get("media_type") in {1, 8}:
-                    path = "p"
-                elif product in {"clips", "reel", "reels"}:
-                    path = "reel"
                 found.append({
                     "code": code,
-                    "path": path,
+                    "path": _path_for_media(node),
                     "like_count": node.get("like_count"),
                     "comment_count": node.get("comment_count"),
                     "taken_at": node.get("taken_at") or node.get("taken_at_ts"),
                     "media_type": node.get("media_type"),
-                    "product_type": product,
+                    "product_type": node.get("product_type"),
                     "caption": _caption_text(node),
                     "pk": node.get("pk") or node.get("id"),
                     "user": node.get("user") if isinstance(node.get("user"), dict) else None,
@@ -74,7 +95,11 @@ def _walk_media(data: Any) -> list[dict[str, Any]]:
 
 
 def list_profile_posts(username: str, *, limit: int = 12) -> dict[str, Any]:
-    """Return the posts embedded on a logged-out Instagram profile page (~12)."""
+    """Return recent posts embedded on a logged-out Instagram profile page.
+
+    Posts are sorted newest-first by media id (``pk``). The page typically
+    embeds ~12 grid items (including older pinned posts).
+    """
     handle = username.lstrip("@")
     session = crequests.Session(impersonate="chrome")
     resp = session.get(
@@ -101,18 +126,24 @@ def list_profile_posts(username: str, *, limit: int = 12) -> dict[str, Any]:
             continue
         media.extend(_walk_media(data))
 
-    seen: set[str] = set()
-    posts: list[dict[str, Any]] = []
-    display_name = None
+    # Dedupe by code, keep richest node (prefer one with caption)
+    by_code: dict[str, dict[str, Any]] = {}
     for m in media:
         code = m["code"]
-        if code in seen:
-            continue
-        seen.add(code)
+        prev = by_code.get(code)
+        if prev is None or (m.get("caption") and not prev.get("caption")):
+            by_code[code] = m
+
+    ordered = sorted(by_code.values(), key=lambda m: _pk_int(m.get("pk")), reverse=True)
+
+    posts: list[dict[str, Any]] = []
+    display_name = None
+    for m in ordered[:limit]:
         user = m.get("user") or {}
         if not display_name:
             display_name = user.get("full_name")
         path = m["path"]
+        code = m["code"]
         posts.append({
             "platform": "instagram",
             "url": f"https://www.instagram.com/{path}/{code}/",
@@ -131,8 +162,6 @@ def list_profile_posts(username: str, *, limit: int = 12) -> dict[str, Any]:
             "product_type": m.get("product_type"),
             "status": "ok",
         })
-        if len(posts) >= limit:
-            break
 
     return {
         "platform": "instagram",
@@ -140,8 +169,8 @@ def list_profile_posts(username: str, *, limit: int = 12) -> dict[str, Any]:
         "display_name": display_name,
         "followers": followers,
         "profile_url": f"https://www.instagram.com/{handle}/",
-        "posts": posts[:limit],
-        "count": min(len(posts), limit),
+        "posts": posts,
+        "count": len(posts),
         "source": "instagram_profile_page",
-        "note": "Logged-out profile pages usually embed ~12 recent posts; likes/comments often need enrich=True.",
+        "note": "Sorted newest-first by media id. Logged-out pages embed ~12 grid items; use enrich=True for likes/comments.",
     }
