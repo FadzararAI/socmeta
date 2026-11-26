@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import quote
@@ -38,17 +39,28 @@ def _is_reply(item: dict[str, Any]) -> bool:
     return False
 
 
+def _is_repost(item: dict[str, Any], handle: str) -> bool:
+    """True when this timeline row is a retweet of someone else's post."""
+    if item.get("reposted_by"):
+        return True
+    author = (item.get("author") or {}).get("screen_name")
+    if author and str(author).lower() != handle.lower():
+        return True
+    return False
+
+
 def list_profile_posts(
     username: str,
     *,
     limit: int = 20,
     include_replies: bool = False,
+    include_reposts: bool = False,
 ) -> dict[str, Any]:
     """List recent posts from an X profile.
 
-    By default, replies (including self-replies in a thread) are skipped so the
-    feed matches standalone posts — not comment/thread continuations.
-    Pass ``include_replies=True`` to keep them.
+    By default skips replies (thread continuations) and retweets so the feed
+    is the account's own standalone posts. Pass ``include_replies`` /
+    ``include_reposts`` to keep them.
     """
     handle = username.lstrip("@")
     posts: list[dict[str, Any]] = []
@@ -56,14 +68,24 @@ def list_profile_posts(
     author_meta: dict[str, Any] = {}
     pages = 0
 
-    while len(posts) < limit and pages < 10:
+    while len(posts) < limit and pages < 15:
         pages += 1
         url = f"https://api.fxtwitter.com/2/profile/{quote(handle)}/statuses"
         if cursor:
             url += f"?cursor={quote(cursor)}"
-        resp = crequests.get(url, impersonate="chrome", timeout=30)
-        if resp.status_code != 200:
-            raise RuntimeError(f"X profile feed HTTP {resp.status_code}: {resp.text[:200]}")
+        resp = None
+        for attempt in range(3):
+            resp = crequests.get(url, impersonate="chrome", timeout=30)
+            # FixTweet occasionally 404s transiently even for valid public profiles.
+            if resp.status_code == 200:
+                break
+            if resp.status_code in {404, 429, 502, 503} and attempt < 2:
+                time.sleep(0.8 * (attempt + 1))
+                continue
+            raise RuntimeError(
+                f"X profile feed HTTP {resp.status_code}: {resp.text[:200]}"
+            )
+        assert resp is not None
         data = resp.json() or {}
         results = data.get("results") or []
         if not results:
@@ -73,16 +95,26 @@ def list_profile_posts(
                 continue
             if not include_replies and _is_reply(item):
                 continue
+            if not include_reposts and _is_repost(item, handle):
+                continue
             author = item.get("author") or {}
-            if not author_meta and author:
+            # Prefer profile handle meta over a retweet's original author.
+            if not author_meta:
+                rb = item.get("reposted_by") if isinstance(item.get("reposted_by"), dict) else None
+                src = rb or author
                 author_meta = {
-                    "username": author.get("screen_name") or handle,
-                    "display_name": author.get("name"),
-                    "followers": author.get("followers"),
-                    "profile_url": author.get("url") or f"https://x.com/{handle}",
+                    "username": (src.get("screen_name") if src else None) or handle,
+                    "display_name": (src.get("name") if src else None) or author.get("name"),
+                    "followers": author.get("followers") if not rb else None,
+                    "profile_url": f"https://x.com/{handle}",
                 }
+            # Fill followers from a later own-post author object if missing
+            if author_meta.get("followers") is None and author.get("screen_name", "").lower() == handle.lower():
+                author_meta["followers"] = author.get("followers")
+                author_meta["display_name"] = author.get("name") or author_meta.get("display_name")
             tid = str(item.get("id") or "")
             replying_to = item.get("replying_to") if isinstance(item.get("replying_to"), dict) else None
+            is_rt = bool(item.get("reposted_by"))
             posts.append({
                 "platform": "x",
                 "url": item.get("url") or (f"https://x.com/{handle}/status/{tid}" if tid else None),
@@ -99,6 +131,7 @@ def list_profile_posts(
                 "quotes": item.get("quotes"),
                 "post_date": _created_iso(item),
                 "is_reply": bool(replying_to),
+                "is_repost": is_rt,
                 "reply_to_id": (replying_to or {}).get("status"),
                 "status": "ok",
             })
@@ -109,6 +142,28 @@ def list_profile_posts(
             break
         cursor = bottom
 
+    notes = []
+    if not include_replies:
+        notes.append("replies excluded")
+    if not include_reposts:
+        notes.append("reposts excluded")
+
+    # Profile card via dedicated endpoint when followers still missing
+    if author_meta.get("followers") is None:
+        try:
+            pr = crequests.get(
+                f"https://api.fxtwitter.com/{quote(handle)}",
+                impersonate="chrome",
+                timeout=20,
+            )
+            if pr.status_code == 200:
+                user = (pr.json() or {}).get("user") or {}
+                author_meta["followers"] = user.get("followers")
+                author_meta["display_name"] = user.get("name") or author_meta.get("display_name")
+                author_meta["username"] = user.get("screen_name") or author_meta.get("username")
+        except Exception:  # noqa: BLE001
+            pass
+
     return {
         "platform": "x",
         "username": author_meta.get("username") or handle,
@@ -118,5 +173,5 @@ def list_profile_posts(
         "posts": posts[:limit],
         "count": min(len(posts), limit),
         "source": "fxtwitter",
-        "note": None if include_replies else "Replies / thread continuations excluded by default.",
+        "note": (", ".join(notes) + " by default.") if notes else None,
     }

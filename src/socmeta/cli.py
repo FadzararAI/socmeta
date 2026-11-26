@@ -37,6 +37,7 @@ def _cmd_profile(args: argparse.Namespace) -> int:
         limit=args.limit,
         enrich=args.enrich,
         include_replies=args.include_replies,
+        include_reposts=args.include_reposts,
         cookies_from_browser=args.cookies_from_browser,
         cookiefile=args.cookiefile,
         verbose=args.verbose,
@@ -102,6 +103,11 @@ def main(argv: list[str] | None = None) -> int:
         "--include-replies",
         action="store_true",
         help="Include replies / thread continuations (X)",
+    )
+    p_profile.add_argument(
+        "--include-reposts",
+        action="store_true",
+        help="Include retweets of other accounts (X)",
     )
     p_profile.add_argument("--cookies-from-browser", default=None)
     p_profile.add_argument("--cookiefile", default=None)
