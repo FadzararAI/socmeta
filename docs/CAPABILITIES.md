@@ -1,7 +1,7 @@
 # socmeta — capabilities by feature
 
 `socmeta` covers **post extraction** and **comment scraping** from a public post URL.  
-Profile feeds and keyword/hashtag discovery live in [`socfeed`](https://github.com/FadzararAI/socfeed) — see that repo’s [CAPABILITIES](https://github.com/FadzararAI/socfeed/blob/main/docs/CAPABILITIES.md).
+Profile feeds live in [`socfeed`](https://github.com/FadzararAI/socfeed). **Keywords / hashtags** are an **ongoing** `socfeed` feature — progress and blockers are summarized in [§3 below](#3-keywords--hashtag-scraper-ongoing--lives-in-socfeed) and fully tracked in [socfeed CAPABILITIES §2](https://github.com/FadzararAI/socfeed/blob/main/docs/CAPABILITIES.md#2-keywords--hashtag-scraper-ongoing).
 
 No login is used. Each section below is self-contained: what it does, metrics, parameters, limits, challenges, and blockers.
 
@@ -174,12 +174,41 @@ Thread-level fields: `platform`, `url`, `count`, `total` (when known), `sort`, `
 
 ---
 
-# 3. Related packages (not in socmeta)
+# 3. Keywords / hashtag scraper (ongoing — lives in socfeed)
 
-| Feature | Package | Doc |
-|---------|---------|-----|
-| Profile → recent posts | [`socfeed`](https://github.com/FadzararAI/socfeed) | [Profile section](https://github.com/FadzararAI/socfeed/blob/main/docs/CAPABILITIES.md#1-profile-scraper) |
-| Keyword / hashtag discovery | [`socfeed`](https://github.com/FadzararAI/socfeed) | [Keywords section](https://github.com/FadzararAI/socfeed/blob/main/docs/CAPABILITIES.md#2-keywords--hashtag-discovery-ongoing) |
+> **Not implemented inside `socmeta`.** Discovery is an **ongoing** `socfeed` feature.  
+> Full detail: [socfeed → Keywords / hashtag scraper (ongoing)](https://github.com/FadzararAI/socfeed/blob/main/docs/CAPABILITIES.md#2-keywords--hashtag-scraper-ongoing).
+
+## 3.1 Why it is separate
+
+Post extract and comments take a **known post URL**. Keywords/hashtags must **find** posts first. Those listing APIs are where platforms apply the strongest login walls and IP gates, so the work tracks in `socfeed`, not here.
+
+## 3.2 Current progress (snapshot)
+
+| Platform | Progress | In CLI? | Blocker / next step |
+|----------|----------|:-------:|---------------------|
+| TikTok | Search + hashtag **built** (`--sort`, `--posted`, Playwright) | Yes | Often **IP-gated** on datacenter exits → residential `--proxy` |
+| YouTube | Search **proven** (innertube / yt-dlp; today & week filters work) | No | Wire `socfeed search --platform youtube` |
+| Threads | Search **proven** (~20 hits, `default`/`recent`, no proxy in tests) | No | Wire CLI; no pagination by design |
+| Facebook | Posts search **blocked** here; hashtag / Watch explore **partial** | No | No solid anonymous posts SERP; only approximate surfaces |
+| Instagram | **Not started** | No | **Login-walled** keyword search |
+| X | **Not started** | No | **Login-walled** search; FixTweet has no search |
+
+## 3.3 Blockers summary
+
+| Blocker | Platforms | Why | What’s needed |
+|---------|-----------|-----|----------------|
+| Residential IP / anti-bot empty listings | TikTok (search & tag) | Listing XHRs return 200 with empty body even when signed | `--proxy` to residential egress |
+| CLI not wired yet | YouTube, Threads | Probes succeeded; product surface unfinished | Finish `socfeed search --platform …` |
+| Anonymous posts search removed/gated | Facebook, Instagram, X | Login or empty SERP for logged-out clients | Session/API credentials — outside no-login scope — or weak substitutes only (FB hashtag/Watch) |
+| No deep pagination logged out | Threads (and thin FB/IG samples) | Product caps anonymous SERP size | Accept sample size or use official approved APIs |
+
+## 3.4 Related socfeed sections
+
+| Feature | Doc |
+|---------|-----|
+| Profile scraper | [socfeed §1](https://github.com/FadzararAI/socfeed/blob/main/docs/CAPABILITIES.md#1-profile-scraper) |
+| Keywords / hashtags (ongoing) | [socfeed §2](https://github.com/FadzararAI/socfeed/blob/main/docs/CAPABILITIES.md#2-keywords--hashtag-scraper-ongoing) |
 
 ---
 

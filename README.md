@@ -8,10 +8,11 @@ For **profile feeds** and **keyword/hashtag discovery**, use **[socfeed](https:/
 
 Detailed write-up (metrics, parameters, limits, challenges, blockers) by feature:
 
-- **[Post extractor](docs/CAPABILITIES.md#1-post-extractor)**
-- **[Comments scraper](docs/CAPABILITIES.md#2-comments-scraper)**
+- **[Post extractor](docs/CAPABILITIES.md#1-post-extractor)** — working
+- **[Comments scraper](docs/CAPABILITIES.md#2-comments-scraper)** — working
+- **[Keywords / hashtags (ongoing)](docs/CAPABILITIES.md#3-keywords--hashtag-scraper-ongoing--lives-in-socfeed)** — progress + blockers snapshot (implementation in [socfeed](https://github.com/FadzararAI/socfeed))
 
-Profile feeds and keyword discovery: **[socfeed CAPABILITIES](https://github.com/FadzararAI/socfeed/blob/main/docs/CAPABILITIES.md)**.
+Profile feeds: **[socfeed § Profile](https://github.com/FadzararAI/socfeed/blob/main/docs/CAPABILITIES.md#1-profile-scraper)**.
 
 ## Workflow
 
