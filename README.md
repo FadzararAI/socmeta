@@ -6,13 +6,13 @@ No login required for public posts.
 
 For **profile feeds** and **keyword/hashtag discovery**, use **[socfeed](https://github.com/FadzararAI/socfeed)**.
 
-Detailed write-up (metrics, parameters, limits, challenges, blockers) by feature:
+Capabilities (STE100 + glossary terms in [GLOSSARY.md](GLOSSARY.md)):
 
-- **[Post extractor](docs/CAPABILITIES.md#1-post-extractor)** — working
-- **[Comments scraper](docs/CAPABILITIES.md#2-comments-scraper)** — working
-- **[Keywords / hashtags (ongoing)](docs/CAPABILITIES.md#3-keywords--hashtag-scraper-ongoing--lives-in-socfeed)** — progress + blockers snapshot (implementation in [socfeed](https://github.com/FadzararAI/socfeed))
+- [Post Extract](docs/CAPABILITIES.md#1-post-extract) — working
+- [Comment Threads](docs/CAPABILITIES.md#2-comment-threads) — working
+- [Keywords / Hashtags (ongoing)](docs/CAPABILITIES.md#3-keywords--hashtag-scraper-ongoing--lives-in-socfeed) — progress + Blockers (built in [socfeed](https://github.com/FadzararAI/socfeed))
 
-Profile feeds: **[socfeed § Profile](https://github.com/FadzararAI/socfeed/blob/main/docs/CAPABILITIES.md#1-profile-scraper)**.
+Profile Feeds: [socfeed § Profile](https://github.com/FadzararAI/socfeed/blob/main/docs/CAPABILITIES.md#1-profile-scraper).
 
 ## Workflow
 
