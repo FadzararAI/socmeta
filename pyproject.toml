@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "socmeta"
-version = "0.1.1"
-description = "Extract public social post metadata — likes, comments, shares, views, followers — from a post URL."
+version = "0.2.0"
+description = "Extract public social post metadata and comments from a post URL. Profile feeds / discovery: see socfeed."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }

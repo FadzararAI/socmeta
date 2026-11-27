@@ -25,4 +25,5 @@ This product includes third-party software:
 
 4. FixTweet / fxtwitter (public HTTP API)
    https://api.fxtwitter.com
-   Used at runtime for X/Twitter profile timelines (no code vendored).
+   Used by the separate socfeed runtime for X/Twitter profile timelines.
+
