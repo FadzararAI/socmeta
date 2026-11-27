@@ -6,7 +6,12 @@ No login required for public posts.
 
 For **profile feeds** and **keyword/hashtag discovery**, use **[socfeed](https://github.com/FadzararAI/socfeed)**.
 
-Full metrics matrix, parameters, rate limits, and platform blockers: **[docs/CAPABILITIES.md](docs/CAPABILITIES.md)**.
+Detailed write-up (metrics, parameters, limits, challenges, blockers) by feature:
+
+- **[Post extractor](docs/CAPABILITIES.md#1-post-extractor)**
+- **[Comments scraper](docs/CAPABILITIES.md#2-comments-scraper)**
+
+Profile feeds and keyword discovery: **[socfeed CAPABILITIES](https://github.com/FadzararAI/socfeed/blob/main/docs/CAPABILITIES.md)**.
 
 ## Workflow
 

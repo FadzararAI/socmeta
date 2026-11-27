@@ -1,147 +1,194 @@
-# socmeta — capabilities, metrics, and limitations
+# socmeta — capabilities by feature
 
-`socmeta` extracts **public** post metadata and **public** comment threads from a post URL. It does not log in. Profile feeds and keyword discovery live in the sister package [`socfeed`](https://github.com/FadzararAI/socfeed).
+`socmeta` covers **post extraction** and **comment scraping** from a public post URL.  
+Profile feeds and keyword/hashtag discovery live in [`socfeed`](https://github.com/FadzararAI/socfeed) — see that repo’s [CAPABILITIES](https://github.com/FadzararAI/socfeed/blob/main/docs/CAPABILITIES.md).
 
-This document describes what works today, which metrics are available, the CLI/API parameters, and the known limits and failure modes.
-
----
-
-## Scope
-
-| Capability | Status | Entry point |
-|------------|--------|-------------|
-| Post metadata (likes, caption, date, …) | Working — 6 platforms | `socmeta <url…>` / `extract()` / `extract_many()` |
-| Comment threads | Working — 6 platforms | `socmeta comments <url…>` / `extract_comments()` / `extract_comments_many()` |
-| Profile feeds | Separate package | [`socfeed`](https://github.com/FadzararAI/socfeed) |
-| Keyword / hashtag discovery | Separate package (partial) | [`socfeed` search/hashtag](https://github.com/FadzararAI/socfeed) |
-
-Supported platforms: **YouTube, TikTok, X, Instagram, Facebook, Threads**.
+No login is used. Each section below is self-contained: what it does, metrics, parameters, limits, challenges, and blockers.
 
 ---
 
-## Post metadata
+# 1. Post extractor
 
-### Workflow
+**Status:** Working on YouTube, TikTok, X, Instagram, Facebook, Threads.  
+**Entry points:** `socmeta <url…>` · `extract()` · `extract_many()`
+
+## 1.1 What it does
+
+Given one or more **post URLs**, detect the platform, pull engagement + caption + author, then (unless disabled) resolve **followers** from the author profile when the post page did not embed them.
 
 ```
-post URL → detect platform → engagement + caption + author
-         → if followers missing → author profile lookup → followers
+post URL → platform → likes / comments / views / … + caption + author
+        → optional followers enrich from author profile
 ```
 
-Bulk input is supported: pass multiple URLs on the CLI or use `extract_many([...])`. Failures become `status: fail` rows so a batch can continue.
+Bulk is supported. A failed URL becomes `status: "fail"` and the batch continues.
 
-### Metrics (field coverage)
+## 1.2 Metrics
 
 | Field | YouTube | TikTok | X | Instagram | Facebook | Threads |
 |-------|:-------:|:------:|:-:|:---------:|:--------:|:-------:|
 | `likes` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `comments` (count) | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `views` | ✓ | ✓ | ✓ | partial | ✓ | ✓* |
+| `views` | ✓ | ✓ | ✓ | partial | ✓ | partial* |
 | `shares` | — | ✓ | — | — | ✓ | ✓ |
 | `reposts` | — | — | ✓ | — | — | ✓ |
 | `bookmarks` | — | ✓ (saves) | ✓ | — | — | — |
-| `followers` | ✓ | ✓ | ✓ | ✓ (profile) | ✓ (profile) | ✓ (profile) |
+| `followers` | ✓ | ✓ | ✓ | ✓ (via profile) | ✓ (via profile) | ✓ (via profile) |
 | `post_date` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `caption` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `username` / `display_name` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
-\*Threads view counts are often only present for the author or via specific permalink fields; logged-out pulls may leave `views` null.
+\*Threads `views` are often author-only or missing for logged-out clients.
 
-**Platform notes**
+**Mapping quirks**
 
-- **X** has no public “shares” metric; use `reposts` + `bookmarks`.
-- **TikTok** UI “Shares” → `shares`; saves → `bookmarks`.
-- **Instagram** views are partial (often reels-oriented); likes may be hidden by the creator.
-- Private, deleted, geo-blocked, or login-gated posts return `status: fail`.
+- **X:** no public “shares”; use `reposts` + `bookmarks`.
+- **TikTok:** UI Shares → `shares`; saves → `bookmarks`.
+- **Instagram:** likes may be hidden by the creator; views are reel-oriented / partial.
 
-### Parameters
+## 1.3 Parameters
 
-| Parameter | Default | Meaning |
-|-----------|---------|---------|
-| URL(s) | required | One or more post URLs |
-| `--no-enrich` | off | Skip author→followers lookup when followers are missing |
-| `--cookies-from-browser` | none | Optional browser cookie jar (yt-dlp style) for gated pages |
-| `--cookiefile` | none | Optional Netscape cookie file |
-| `-v` / `--verbose` | off | Extra extractor logging |
-| `--coverage` | — | Print the field-coverage matrix as JSON |
+| Parameter | Default | Detail |
+|-----------|---------|--------|
+| URL(s) | required | One or more post permalinks |
+| `--no-enrich` | off | Skip author→followers lookup |
+| `--cookies-from-browser` | none | Optional browser cookies (yt-dlp) |
+| `--cookiefile` | none | Netscape cookie file |
+| `-v` / `--verbose` | off | Extra logging |
+| `--coverage` | — | Dump this field-coverage matrix as JSON |
 
-### Limitations (post extract)
+Python: `extract(url, enrich=True, cookies_from_browser=…, cookiefile=…)` · `extract_many(urls, …)`.
 
-| Limit | Why |
-|-------|-----|
-| Public posts only | No session login; private / friends-only content is out of scope |
-| Soft rate limits | Platforms throttle anonymous clients. Bulk runs are sequential; heavy parallel use can yield 429s, empty bodies, or temporary blocks |
-| Cookie / region variance | Some posts render differently by IP region or require cookies for full HTML |
-| Instagram fragility | Logged-out Instagram often serves a thin page or login wall; metrics may be incomplete |
-| Text-only Facebook posts | Some text posts expose fewer media fields than reels/videos |
+## 1.4 Limits
+
+| Limit | Detail |
+|-------|--------|
+| Public posts only | Private, friends-only, or age-gated posts are out of scope |
+| Sequential bulk | `extract_many` runs one URL after another; safer against bans, slower for large lists |
+| Soft platform quotas | Anonymous clients get throttled; symptoms are timeouts, 429s, or empty/partial HTML |
+| Region / cookie variance | The same URL can render different fields by egress country or cookie state |
+| Text-only Facebook | Some text posts expose thinner media metadata than reels/videos |
+
+## 1.5 Challenges
+
+| Challenge | Detail |
+|-----------|--------|
+| Keeping extractors fresh | yt-dlp and Meta page shapes change; a green path today can break after a frontend deploy |
+| Followers not always on the post | IG / FB / Threads often need a second request to the author profile |
+| Inconsistent “share” semantics | Platforms invent different counters; we normalize into `shares` / `reposts` / `bookmarks` with documented mapping |
+| Partial success | A post can return `status: ok` with some null fields when the page simply does not show that metric |
+
+## 1.6 Blockers (when post extract fails)
+
+| Blocker | Why it happens | What would make it work |
+|---------|----------------|-------------------------|
+| Private / deleted post | Content is not in the public HTML/API | A session that can see it (login) — **out of scope** |
+| Instagram login wall on the post page | Meta serves a login shell instead of media JSON for some IPs/UAs | Residential egress and/or cookies; still fragile without login |
+| Geo / copyright block | Platform returns a block page | Exit IP in an allowed region |
+| yt-dlp extractor outage | Upstream site marked broken | Wait for yt-dlp fix, or temporary cookies |
 
 ---
 
-## Comments
+# 2. Comments scraper
 
-### Workflow
+**Status:** Working on YouTube, TikTok, X, Instagram, Facebook, Threads.  
+**Entry points:** `socmeta comments <url…>` · `extract_comments()` · `extract_comments_many()`
+
+## 2.1 What it does
+
+Given one or more **post URLs**, fetch **top-level comments** (and optionally nested replies), then apply `--sort`.
 
 ```
-post URL → platform comment API / page → top-level comments
-         → optional nested replies
-         → --sort newest | top | relevant
+post URL → comment list API / page → top-level comments
+        → optional replies under each comment
+        → sort: newest | top | relevant
 ```
 
-Bulk input is supported (`socmeta comments URL1 URL2 …`).
+## 2.2 Metrics (per comment)
 
-### Comment object (typical fields)
+Typical fields: `id`, `text`, `likes`, `created_at`, `username`, `display_name`, `profile_url`, `reply_count`, optional `replies[]`.
 
-`id`, `text`, `likes`, `created_at`, `username`, `display_name`, `profile_url` (when available), `reply_count`, optional nested `replies[]`.
+Thread-level fields: `platform`, `url`, `count`, `total` (when known), `sort`, `include_replies`, `status`, `note`.
 
-### Parameters
+## 2.3 Parameters
 
-| Parameter | Default | Meaning |
-|-----------|---------|---------|
+| Parameter | Default | Detail |
+|-----------|---------|--------|
 | URL(s) | required | One or more post URLs |
 | `--limit` | `50` | Max **top-level** comments |
-| `--include-replies` | off | Also fetch replies under each comment |
-| `--replies-limit` | `20` | Max replies per parent when replies are on |
-| `--sort` | `newest` | `newest` · `top` (by likes) · `relevant` (platform ranking when available) |
-| `--ranking` | follows `--sort` | **X only** override of fetch ranking: `recency` or `likes` |
+| `--include-replies` | off | Also fetch replies |
+| `--replies-limit` | `20` | Cap per parent when replies are on |
+| `--sort` | `newest` | `newest` · `top` (likes) · `relevant` (platform ranking when available) |
+| `--ranking` | follows `--sort` | **X only:** force fetch mode `recency` or `likes` |
 
-**How `--sort` is applied**
+**Sort behavior**
 
-| Mode | Behavior |
-|------|----------|
-| `newest` | Order by `created_at` descending (YouTube uses yt-dlp `comment_sort=new`; Facebook uses chronological intent; X fetches `recency`) |
-| `top` | Prefer likes (YouTube `comment_sort=top`; X likes ranking; Facebook unfiltered ranked list + client likes sort; others client-side by likes) |
-| `relevant` | Keep platform ranking when the fetch already ranked (YouTube top sort, Facebook “Most relevant”, X likes ranking); otherwise preserve fetch order |
+| `--sort` | Behavior |
+|----------|----------|
+| `newest` | By `created_at` desc; YouTube uses `comment_sort=new`; Facebook chronological intent; X fetches `recency` |
+| `top` | Prefer likes; YouTube `comment_sort=top`; X likes ranking; Facebook ranked/unfiltered + client likes; others client-side |
+| `relevant` | Preserve platform ranking when the fetch was already ranked; else keep fetch order |
 
-### Per-platform comment behavior
+## 2.4 Per-platform details
 
-| Platform | Source | Replies | Sort support | Notable limits |
-|----------|--------|---------|--------------|----------------|
-| YouTube | yt-dlp `getcomments` | Optional | Native new/top | Totals come from metadata first (fetch caps must not overwrite `comment_count`) |
-| TikTok | Web `comment/list` (+ reply list) | Optional | Client-side (API feed order + local sort) | Needs a warm session; empty or challenged pages fail |
-| Facebook | SSR + GraphQL UFI | Optional | Native intents (newest / relevant / all) + local likes for `top` | “Most relevant” filters some comments; logged-out depth varies |
-| Threads | Permalink / GraphQL blobs | Optional | Client-side | Logged-out reply depth is shallow (often one page) |
-| Instagram | Logged-out GraphQL / page | Optional | Client-side | Often **likes = 0** logged out; may fetch only a subset (~dozen+) without login |
-| X | FixTweet conversation API | Optional (nested when present in pages) | Fetch `recency`/`likes` + local sort | Deleted / withheld tweets → conversation 404 (“tombstone”); no official search-backed comments |
+| Platform | Source | Replies | Native sort hooks |
+|----------|--------|---------|-------------------|
+| YouTube | yt-dlp `getcomments` | Optional | `comment_sort` new/top |
+| TikTok | Web comment + reply list APIs | Optional | Client-side after fetch |
+| Facebook | Permalink SSR + UFI GraphQL | Optional | Intent tokens (newest / most relevant / all) |
+| Threads | Permalink / embedded GraphQL | Optional | Client-side |
+| Instagram | Logged-out GraphQL / page | Optional | Client-side |
+| X | FixTweet conversation API | Optional when nested IDs appear in pages | Fetch `recency` / `likes` |
 
-### Limitations (comments)
+## 2.5 Limits
 
-| Limit | Why |
-|-------|-----|
-| Replies off by default | Keeps calls cheaper and faster; nested fetch multiplies requests |
-| Instagram engagement gaps | Meta withholds like counts and deeper pagination for anonymous clients |
-| Facebook filtering | Ranked intents intentionally hide “low quality” / spam-shaped comments |
-| Soft bot gates | Unusual IPs or fast bulk may get empty JSON (`status_code` errors) rather than HTTP 403 |
-| No authenticated mode | Full IG/FB comment history often requires a real user session — out of scope for this package |
+| Limit | Detail |
+|-------|--------|
+| Top-level first | Replies are off by default to control cost |
+| `--include-replies` multiplies requests | Roughly `parents × reply pages` |
+| Instagram like counts often `0` | Logged-out APIs omit diggs; `--sort top` is weak on IG |
+| Instagram depth | Anonymous clients often get only a short first page (~dozens), not full threads |
+| Facebook “Most relevant” | Intentionally filters spam / low-quality; `total` can exceed returned rows |
+| Threads reply depth | Logged-out replies are often a single shallow page |
+| X tombstones | Deleted/withheld root tweets make the conversation endpoint 404 |
+| Soft rate limits | Fast bulk comment pulls can empty out mid-batch |
+
+## 2.6 Challenges
+
+| Challenge | Detail |
+|-----------|--------|
+| Ranking ≠ completeness | `relevant` / Facebook ranked intents trade coverage for “quality” |
+| Client-side sort on capped windows | Sorting 50 fetched comments is not the same as “top comments on the whole post” |
+| Keeping GraphQL `doc_id`s / FixTweet shapes current | Meta and FixTweet change without notice |
+| Separating “no comments” from “gated empty” | Both can look like `count: 0`; notes/errors try to distinguish |
+
+## 2.7 Blockers (when comments fail or degrade)
+
+| Blocker | Why | What’s needed |
+|---------|-----|----------------|
+| Instagram login for full threads | Meta gates pagination and likes behind session | Logged-in cookies — **out of scope** for default socmeta |
+| Facebook filtered intents | Product design, not a bug | Use `--sort newest` for broader chrono lists; still not guaranteed complete |
+| X conversation unavailable | Tweet deleted, withheld, or FixTweet outage | Different URL / wait / alternate provider |
+| TikTok empty comment JSON | Challenge page or cold session | Warm video page / retry; rarely residential IP |
+| Comments disabled on the post | Creator or platform setting | Nothing to scrape |
+
+---
+
+# 3. Related packages (not in socmeta)
+
+| Feature | Package | Doc |
+|---------|---------|-----|
+| Profile → recent posts | [`socfeed`](https://github.com/FadzararAI/socfeed) | [Profile section](https://github.com/FadzararAI/socfeed/blob/main/docs/CAPABILITIES.md#1-profile-scraper) |
+| Keyword / hashtag discovery | [`socfeed`](https://github.com/FadzararAI/socfeed) | [Keywords section](https://github.com/FadzararAI/socfeed/blob/main/docs/CAPABILITIES.md#2-keywords--hashtag-discovery-ongoing) |
 
 ---
 
 ## Error model
 
-Successful rows use `status: "ok"`. Failures use `status: "fail"` with an `error` string. Bulk helpers never abort the whole batch on a single bad URL.
+- `status: "ok"` — row produced (fields may still be null).
+- `status: "fail"` — extraction aborted for that URL; see `error`.
+- Bulk helpers never abort the whole list on one failure.
 
----
+## License / notices
 
-## Related
-
-- Field matrix CLI: `socmeta --coverage`
-- Profile feeds & discovery: [socfeed CAPABILITIES](https://github.com/FadzararAI/socfeed/blob/main/docs/CAPABILITIES.md)
-- Third-party notices: [NOTICE](../NOTICE)
+MIT — [LICENSE](../LICENSE). Third-party attributions — [NOTICE](../NOTICE).
